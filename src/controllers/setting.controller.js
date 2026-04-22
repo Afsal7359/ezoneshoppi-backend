@@ -4,6 +4,17 @@ import Setting from '../models/Setting.js';
 export const getSettings = asyncHandler(async (_req, res) => {
   let s = await Setting.findOne({ key: 'main' });
   if (!s) s = await Setting.create({ key: 'main' });
+
+  // Auto-migrate: replace any leftover "eTrade" branding with "ezoneshoppi"
+  let dirty = false;
+  if (s.siteName && s.siteName.toLowerCase().includes('etrade')) {
+    s.siteName = 'ezoneshoppi'; dirty = true;
+  }
+  if (s.footer?.copyright && s.footer.copyright.includes('eTrade')) {
+    s.footer.copyright = s.footer.copyright.replace(/eTrade/g, 'ezoneshoppi'); dirty = true;
+  }
+  if (dirty) await s.save();
+
   res.json({ success: true, settings: s });
 });
 
