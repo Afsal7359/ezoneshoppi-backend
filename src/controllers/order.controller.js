@@ -6,6 +6,11 @@ import Product from '../models/Product.js';
 import Coupon from '../models/Coupon.js';
 import Setting from '../models/Setting.js';
 
+// Confirm Razorpay keys are present at startup
+if (!process.env.RAZORPAY_KEY_ID || !process.env.RAZORPAY_KEY_SECRET) {
+  console.warn('[Razorpay] RAZORPAY_KEY_ID or RAZORPAY_KEY_SECRET not set!');
+}
+
 const getRzp = () =>
   new Razorpay({
     key_id: process.env.RAZORPAY_KEY_ID,
@@ -56,11 +61,12 @@ const buildOrderTotals = async ({ items, couponCode }) => {
   }
 
   const subtotalAfterDiscount = itemsPrice - discount;
-  const taxPrice = settings.tax.enabled ? +(subtotalAfterDiscount * (settings.tax.percent / 100)).toFixed(2) : 0;
-  const shippingPrice =
-    subtotalAfterDiscount >= (settings.shipping.freeShippingThreshold || 0)
-      ? 0
-      : settings.shipping.flatRate || 0;
+  const taxEnabled = settings?.tax?.enabled ?? false;
+  const taxPercent = settings?.tax?.percent ?? 0;
+  const taxPrice = taxEnabled ? +(subtotalAfterDiscount * (taxPercent / 100)).toFixed(2) : 0;
+  const freeThreshold = settings?.shipping?.freeShippingThreshold ?? 0;
+  const flatRate = settings?.shipping?.flatRate ?? 0;
+  const shippingPrice = subtotalAfterDiscount >= freeThreshold ? 0 : flatRate;
   const totalPrice = +(subtotalAfterDiscount + taxPrice + shippingPrice).toFixed(2);
 
   return { dbItems, itemsPrice, discount, taxPrice, shippingPrice, totalPrice, coupon };
@@ -208,6 +214,86 @@ export const updateStatus = asyncHandler(async (req, res) => {
   await order.save();
   res.json({ success: true, order });
 });
+
+// @route POST /api/payments/webhook  (Razorpay webhook — no auth, raw body)
+export const razorpayWebhook = async (req, res) => {
+  try {
+    const webhookSecret = process.env.RAZORPAY_WEBHOOK_SECRET;
+    if (!webhookSecret) {
+      console.warn('[Webhook] RAZORPAY_WEBHOOK_SECRET not set — skipping verification');
+    } else {
+      const signature = req.headers['x-razorpay-signature'];
+      const rawBody = req.body; // Buffer when express.raw() is used
+      const expectedSig = crypto
+        .createHmac('sha256', webhookSecret)
+        .update(rawBody)
+        .digest('hex');
+      if (expectedSig !== signature) {
+        return res.status(400).json({ error: 'Invalid webhook signature' });
+      }
+    }
+
+    const payload = typeof req.body === 'string' || Buffer.isBuffer(req.body)
+      ? JSON.parse(req.body.toString())
+      : req.body;
+
+    const event = payload.event;
+    console.log('[Webhook] Event:', event);
+
+    if (event === 'payment.captured') {
+      const payment = payload.payload?.payment?.entity;
+      if (!payment) return res.json({ ok: true });
+
+      const rzpOrderId = payment.order_id;
+      const order = await Order.findOne({ 'paymentResult.razorpay_order_id': rzpOrderId });
+      if (!order) {
+        console.warn('[Webhook] Order not found for razorpay_order_id:', rzpOrderId);
+        return res.json({ ok: true }); // still 200 so Razorpay doesn't retry
+      }
+
+      if (order.paymentStatus === 'paid') return res.json({ ok: true }); // already handled
+
+      order.paymentStatus = 'paid';
+      order.paymentResult = {
+        ...order.paymentResult,
+        razorpay_payment_id: payment.id,
+        paidAt: new Date(payment.created_at * 1000),
+      };
+      order.status = 'processing';
+      order.timeline.push({ status: 'processing', note: 'Payment captured via webhook' });
+      await order.save();
+
+      // Deduct stock
+      for (const it of order.items) {
+        await Product.findByIdAndUpdate(it.product, {
+          $inc: { stock: -it.quantity, sold: it.quantity },
+        });
+      }
+      if (order.couponCode) {
+        await Coupon.findOneAndUpdate({ code: order.couponCode }, { $inc: { usedCount: 1 } });
+      }
+
+      console.log('[Webhook] Order', order.orderNumber, 'marked paid');
+    }
+
+    if (event === 'payment.failed') {
+      const payment = payload.payload?.payment?.entity;
+      if (!payment) return res.json({ ok: true });
+      const order = await Order.findOne({ 'paymentResult.razorpay_order_id': payment.order_id });
+      if (order && order.paymentStatus === 'pending') {
+        order.paymentStatus = 'failed';
+        order.timeline.push({ status: 'pending', note: 'Payment failed via webhook' });
+        await order.save();
+        console.log('[Webhook] Order', order.orderNumber, 'payment failed');
+      }
+    }
+
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('[Webhook] Error:', err.message);
+    res.status(500).json({ error: 'Webhook processing failed' });
+  }
+};
 
 // @route GET /api/orders  (admin)
 export const listAllOrders = asyncHandler(async (req, res) => {

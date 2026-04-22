@@ -2,6 +2,9 @@ import express from 'express';
 import {
   register,
   login,
+  sendOtp,
+  verifyOtpLogin,
+  googleAuth,
   me,
   updateProfile,
   addAddress,
@@ -13,8 +16,18 @@ import { protect } from '../middleware/auth.middleware.js';
 
 const router = express.Router();
 
+// Legacy (password-based)
 router.post('/register', register);
 router.post('/login', login);
+
+// OTP email auth
+router.post('/send-otp', sendOtp);
+router.post('/verify-otp', verifyOtpLogin);
+
+// Google OAuth
+router.post('/google', googleAuth);
+
+// Protected
 router.get('/me', protect, me);
 router.put('/profile', protect, updateProfile);
 router.post('/addresses', protect, addAddress);

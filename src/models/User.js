@@ -18,27 +18,29 @@ const addressSchema = new mongoose.Schema(
 
 const userSchema = new mongoose.Schema(
   {
-    name: { type: String, required: true, trim: true },
-    email: { type: String, required: true, unique: true, lowercase: true, trim: true },
-    phone: { type: String, trim: true },
-    password: { type: String, required: true, minlength: 6, select: false },
-    avatar: { type: String, default: '' },
-    role: { type: String, enum: ['customer', 'admin'], default: 'customer' },
+    name:     { type: String, required: true, trim: true },
+    email:    { type: String, required: true, unique: true, lowercase: true, trim: true },
+    phone:    { type: String, trim: true },
+    password: { type: String, minlength: 6, select: false }, // optional for OAuth/OTP users
+    googleId: { type: String, unique: true, sparse: true },  // Google OAuth
+    avatar:   { type: String, default: '' },
+    role:     { type: String, enum: ['customer', 'admin'], default: 'customer' },
     addresses: [addressSchema],
-    wishlist: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Product' }],
-    isActive: { type: Boolean, default: true },
+    wishlist:  [{ type: mongoose.Schema.Types.ObjectId, ref: 'Product' }],
+    isActive:  { type: Boolean, default: true },
     lastLogin: Date,
   },
   { timestamps: true }
 );
 
 userSchema.pre('save', async function (next) {
-  if (!this.isModified('password')) return next();
+  if (!this.password || !this.isModified('password')) return next();
   this.password = await bcrypt.hash(this.password, 12);
   next();
 });
 
 userSchema.methods.matchPassword = function (entered) {
+  if (!this.password) return Promise.resolve(false);
   return bcrypt.compare(entered, this.password);
 };
 
