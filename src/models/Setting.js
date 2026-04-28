@@ -20,7 +20,8 @@ const settingSchema = new mongoose.Schema(
     /* --------------- Announcement --------------- */
     announcement: {
       enabled: { type: Boolean, default: true },
-      text: { type: String, default: 'Free shipping on orders over ₹999 • 30-day returns' },
+      text: { type: String, default: 'Free shipping on orders over ₹5999 • 2-day returns' },
+      bgColor: { type: String, default: '#000000' },
       link: String,
     },
 
@@ -79,6 +80,7 @@ const settingSchema = new mongoose.Schema(
       twitter: String,
       youtube: String,
       linkedin: String,
+      whatsapp: String,
     },
 
     /* --------------- Footer --------------- */
@@ -111,10 +113,11 @@ const settingSchema = new mongoose.Schema(
 
     /* --------------- Payment --------------- */
     payment: {
-      razorpayEnabled: { type: Boolean, default: true },
-      codEnabled: { type: Boolean, default: true },
-      currency: { type: String, default: 'INR' },
-      currencySymbol: { type: String, default: '₹' },
+      razorpayEnabled:  { type: Boolean, default: true },
+      codEnabled:       { type: Boolean, default: true },
+      whatsappEnabled:  { type: Boolean, default: false },
+      currency:         { type: String,  default: 'INR' },
+      currencySymbol:   { type: String,  default: '₹' },
     },
 
     /* --------------- SEO --------------- */

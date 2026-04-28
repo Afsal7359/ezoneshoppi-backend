@@ -50,6 +50,22 @@ export const createReview = asyncHandler(async (req, res) => {
   res.status(201).json({ success: true, review: r });
 });
 
+export const canReviewProduct = asyncHandler(async (req, res) => {
+  const { productId } = req.params;
+  const hasPurchased = await Order.findOne({
+    user: req.user._id,
+    'items.product': productId,
+    paymentStatus: 'paid',
+  });
+  const alreadyReviewed = await Review.findOne({ product: productId, user: req.user._id });
+  res.json({
+    success: true,
+    canReview: !!hasPurchased && !alreadyReviewed,
+    hasPurchased: !!hasPurchased,
+    alreadyReviewed: !!alreadyReviewed,
+  });
+});
+
 export const deleteReview = asyncHandler(async (req, res) => {
   const r = await Review.findById(req.params.id);
   if (!r) {
