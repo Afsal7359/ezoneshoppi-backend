@@ -75,12 +75,12 @@ const settingSchema = new mongoose.Schema(
 
     /* --------------- Social --------------- */
     social: {
-      facebook: String,
+      facebook:  String,
       instagram: String,
-      twitter: String,
-      youtube: String,
-      linkedin: String,
-      whatsapp: String,
+      twitter:   String,
+      youtube:   String,
+      linkedin:  String,
+      whatsapp:  { type: String, default: '919495517763' },
     },
 
     /* --------------- Footer --------------- */

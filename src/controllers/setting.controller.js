@@ -17,6 +17,10 @@ export const getSettings = asyncHandler(async (_req, res) => {
   if (s.announcement?.text && s.announcement.text.includes('₹999')) {
     s.announcement.text = 'Free shipping on orders over ₹5999 • 2-day returns'; dirty = true;
   }
+  // Auto-migrate: set default WhatsApp number if none saved
+  if (!s.social?.whatsapp) {
+    s.social = { ...(s.social || {}), whatsapp: '919495517763' }; dirty = true;
+  }
   if (dirty) await s.save();
 
   res.json({ success: true, settings: s });
