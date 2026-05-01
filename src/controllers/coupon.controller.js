@@ -1,9 +1,14 @@
 import asyncHandler from 'express-async-handler';
 import Coupon from '../models/Coupon.js';
 
-export const listCoupons = asyncHandler(async (_req, res) => {
-  const items = await Coupon.find().sort({ createdAt: -1 });
-  res.json({ success: true, items });
+export const listCoupons = asyncHandler(async (req, res) => {
+  const { page = 1, limit = 25 } = req.query;
+  const skip = (Number(page) - 1) * Number(limit);
+  const [items, total] = await Promise.all([
+    Coupon.find().sort({ createdAt: -1 }).skip(skip).limit(Number(limit)),
+    Coupon.countDocuments(),
+  ]);
+  res.json({ success: true, items, total, page: Number(page), pages: Math.ceil(total / Number(limit)) });
 });
 
 export const createCoupon = asyncHandler(async (req, res) => {

@@ -5,6 +5,22 @@ import Order from '../models/Order.js';
 import Product from '../models/Product.js';
 import Coupon from '../models/Coupon.js';
 import Setting from '../models/Setting.js';
+import User from '../models/User.js';
+import { sendOrderConfirmationEmail, sendAdminNewOrderEmail } from '../utils/mailer.js';
+
+async function firOrderEmails(order, userEmail, siteName) {
+  await Promise.allSettled([
+    sendOrderConfirmationEmail(userEmail, order, siteName),
+    sendAdminNewOrderEmail(order, userEmail, siteName),
+  ]);
+}
+
+async function getSiteName() {
+  try {
+    const s = await Setting.findOne({ key: 'main' });
+    return s?.siteName || 'ezoneshoppi';
+  } catch { return 'ezoneshoppi'; }
+}
 
 // Confirm Razorpay keys are present at startup
 if (!process.env.RAZORPAY_KEY_ID || !process.env.RAZORPAY_KEY_SECRET) {
@@ -131,6 +147,7 @@ export const createOrder = asyncHandler(async (req, res) => {
   order.status = 'processing';
   order.timeline.push({ status: 'processing', note: 'COD confirmed' });
   await order.save();
+  getSiteName().then((sn) => firOrderEmails(order, req.user.email, sn));
   res.status(201).json({ success: true, order });
 });
 
@@ -173,6 +190,7 @@ export const verifyPayment = asyncHandler(async (req, res) => {
     await Coupon.findOneAndUpdate({ code: order.couponCode }, { $inc: { usedCount: 1 } });
   }
 
+  getSiteName().then((sn) => firOrderEmails(order, req.user.email, sn));
   res.json({ success: true, order });
 });
 
@@ -274,6 +292,9 @@ export const razorpayWebhook = async (req, res) => {
       }
 
       console.log('[Webhook] Order', order.orderNumber, 'marked paid');
+      User.findById(order.user, 'email name').then((u) => {
+        if (u) getSiteName().then((sn) => firOrderEmails(order, u.email, sn));
+      });
     }
 
     if (event === 'payment.failed') {
@@ -297,9 +318,10 @@ export const razorpayWebhook = async (req, res) => {
 
 // @route GET /api/orders  (admin)
 export const listAllOrders = asyncHandler(async (req, res) => {
-  const { status, q, page = 1, limit = 20 } = req.query;
+  const { status, paymentStatus, q, page = 1, limit = 20 } = req.query;
   const filter = {};
   if (status) filter.status = status;
+  if (paymentStatus) filter.paymentStatus = paymentStatus;
   if (q) filter.orderNumber = new RegExp(q, 'i');
   const skip = (Number(page) - 1) * Number(limit);
   const [items, total] = await Promise.all([

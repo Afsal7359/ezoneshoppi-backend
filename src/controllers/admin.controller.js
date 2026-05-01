@@ -18,7 +18,7 @@ export const dashboardStats = asyncHandler(async (_req, res) => {
         .limit(6)
         .select('name stock images')
         .lean(),
-      Order.find()
+      Order.find({ paymentStatus: 'paid' })
         .select('orderNumber totalPrice paymentStatus status createdAt user')
         .populate('user', 'name email')
         .sort({ createdAt: -1 })

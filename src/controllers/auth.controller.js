@@ -3,7 +3,7 @@ import crypto from 'crypto';
 import { OAuth2Client } from 'google-auth-library';
 import User from '../models/User.js';
 import { generateToken } from '../utils/generateToken.js';
-import { sendOtpEmail } from '../utils/mailer.js';
+import { sendOtpEmail, sendForgotPasswordOtp } from '../utils/mailer.js';
 import { setOtp, verifyOtp } from '../utils/otpStore.js';
 
 const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
@@ -222,6 +222,50 @@ export const deleteAddress = asyncHandler(async (req, res) => {
   user.addresses.pull({ _id: req.params.id });
   await user.save();
   res.json({ success: true, addresses: user.addresses });
+});
+
+/* ── @route POST /api/auth/forgot-password ──────────────────────── */
+export const forgotPassword = asyncHandler(async (req, res) => {
+  const { email } = req.body;
+  if (!email) { res.status(400); throw new Error('Email is required'); }
+
+  const user = await User.findOne({ email: email.toLowerCase() });
+  if (!user) { res.status(404); throw new Error('No account found with this email'); }
+
+  const otp = generateOtp();
+  setOtp('fp_' + email.toLowerCase(), otp);
+
+  try {
+    await sendForgotPasswordOtp(email, otp);
+  } catch (err) {
+    console.error('[forgotPassword] SMTP error:', err.message);
+    res.status(500);
+    throw new Error('Failed to send OTP. Check SMTP settings.');
+  }
+
+  res.json({ success: true, message: 'OTP sent to your email' });
+});
+
+/* ── @route POST /api/auth/reset-password ───────────────────────── */
+export const resetPassword = asyncHandler(async (req, res) => {
+  const { email, otp, password } = req.body;
+  if (!email || !otp || !password) { res.status(400); throw new Error('Email, OTP and new password are required'); }
+  if (password.length < 6) { res.status(400); throw new Error('Password must be at least 6 characters'); }
+
+  try {
+    verifyOtp('fp_' + email.toLowerCase(), otp);
+  } catch (err) {
+    res.status(400);
+    throw new Error(err.message);
+  }
+
+  const user = await User.findOne({ email: email.toLowerCase() });
+  if (!user) { res.status(404); throw new Error('User not found'); }
+
+  user.password = password;
+  await user.save();
+
+  res.json({ success: true, message: 'Password reset successfully', token: generateToken(user._id), user: sanitize(user) });
 });
 
 /* ── Wishlist ────────────────────────────────────────────────────── */

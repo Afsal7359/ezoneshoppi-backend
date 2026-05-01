@@ -11,6 +11,8 @@ import {
   updateAddress,
   deleteAddress,
   toggleWishlist,
+  forgotPassword,
+  resetPassword,
 } from '../controllers/auth.controller.js';
 import { protect } from '../middleware/auth.middleware.js';
 
@@ -23,6 +25,10 @@ router.post('/login', login);
 // OTP email auth
 router.post('/send-otp', sendOtp);
 router.post('/verify-otp', verifyOtpLogin);
+
+// Forgot / Reset password
+router.post('/forgot-password', forgotPassword);
+router.post('/reset-password', resetPassword);
 
 // Google OAuth
 router.post('/google', googleAuth);
