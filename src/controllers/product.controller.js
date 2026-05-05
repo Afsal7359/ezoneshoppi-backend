@@ -10,7 +10,7 @@ const LIST_PROJECT = {
   rating: 1, numReviews: 1,
   stock: 1, lowStockThreshold: 1,
   isFeatured: 1, isNewArrival: 1, isBestSeller: 1,
-  sold: 1, returnDays: 1, category: 1,
+  sold: 1, returnDays: 1, category: 1, variants: 1,
 };
 
 // @route GET /api/products
@@ -163,7 +163,7 @@ export const relatedProducts = asyncHandler(async (req, res) => {
   const items = await Product.find(
     { _id: { $ne: p._id }, category: p.category, isActive: true },
   )
-    .select('name slug brand images price comparePrice discountPercent rating numReviews stock lowStockThreshold sold returnDays category')
+    .select('name slug brand images price comparePrice discountPercent rating numReviews stock lowStockThreshold sold returnDays category variants')
     .populate('category', 'name slug')
     .limit(8)
     .lean();
